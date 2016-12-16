@@ -1,9 +1,6 @@
 
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
+import java.sql.SQLException;
+import java.util.*;
 
 import kafka.serializer.StringDecoder;
 
@@ -24,11 +21,14 @@ import scala.Tuple2;
 @SuppressWarnings("unchecked")
 public class SparkStreamingKafka {
 
+    private static HBaseConnector connector = new HBaseConnector();
+
     @SuppressWarnings("serial")
     public static void main(String[] str) throws InterruptedException {
 
-        String brokers = "localhost:9091";
-        String topics = "StreamingTopic";
+        String brokers = "localhost:9010";
+        String topics = "NewTopic";
+
 
         // Create context with a 2 seconds batch interval
         SparkConf sparkConf = new SparkConf().setMaster("local")
@@ -51,6 +51,7 @@ public class SparkStreamingKafka {
         JavaDStream<String> lines = messages
                 .map(new Function<Tuple2<String, String>, String>() {
                     public String call(Tuple2<String, String> tuple2) {
+
                         return tuple2._2();
                     }
                 });
@@ -58,8 +59,16 @@ public class SparkStreamingKafka {
         JavaDStream<String> words = lines
                 .flatMap(new FlatMapFunction<String, String>() {
 
-                    public Iterable<String> call(String x) {
-                        return Arrays.asList(x.split(" "));
+                    public Iterator<String> call(String x) {
+
+                        try {
+                            int i = 0;
+                            SparkStreamingKafka.insert(x);
+                        } catch (Exception e) {
+                            System.out.println("Error while inserting into HBase");
+                            e.printStackTrace();
+                        };
+                        return Arrays.asList(x.split(" ")).iterator();
                     }
                 });
         JavaPairDStream<String, Integer> wordCounts = words.mapToPair(
@@ -78,6 +87,10 @@ public class SparkStreamingKafka {
         jssc.start();
         jssc.awaitTermination();
 
+    }
+
+    private static void insert(String str) throws SQLException {
+        connector.insert(str);
     }
 
 }
